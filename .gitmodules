@@ -1,0 +1,18 @@
+[submodule "Mecha-UI"]
+	path = Mecha-UI
+	url = ./Mecha-UI
+[submodule "Richard-admin"]
+	path = Richard-admin
+	url = ./Richard-admin
+[submodule "Richard-ai-server"]
+	path = Richard-ai-server
+	url = ./Richard-ai-server
+[submodule "Richard-backend"]
+	path = Richard-backend
+	url = ./Richard-backend
+[submodule "Richard-esp32"]
+	path = Richard-esp32
+	url = ./Richard-esp32
+[submodule "Richard-mqtt-gateway"]
+	path = Richard-mqtt-gateway
+	url = ./Richard-mqtt-gateway
