@@ -1,18 +1,18 @@
 [submodule "Mecha-UI"]
 	path = Mecha-UI
-	url = ./Mecha-UI
+	url = https://github.com/RichardLirh/Mecha-UI.git
 [submodule "Richard-admin"]
 	path = Richard-admin
-	url = ./Richard-admin
+	url = https://github.com/RichardLirh/Richard-admin.git
 [submodule "Richard-ai-server"]
 	path = Richard-ai-server
-	url = ./Richard-ai-server
+	url = https://github.com/RichardLirh/Richard-ai-server.git
 [submodule "Richard-backend"]
 	path = Richard-backend
-	url = ./Richard-backend
+	url = https://github.com/RichardLirh/Richard-backend.git
 [submodule "Richard-esp32"]
 	path = Richard-esp32
-	url = ./Richard-esp32
+	url = https://github.com/RichardLirh/Richard-esp32.git
 [submodule "Richard-mqtt-gateway"]
 	path = Richard-mqtt-gateway
-	url = ./Richard-mqtt-gateway
+	url = https://github.com/RichardLirh/Richard-mqtt-gateway.git
