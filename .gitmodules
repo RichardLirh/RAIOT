@@ -16,3 +16,6 @@
 [submodule "Richard-mqtt-gateway"]
 	path = Richard-mqtt-gateway
 	url = https://github.com/RichardLirh/Richard-mqtt-gateway.git
+[submodule "richard-fonts"]
+	path = richard-fonts
+	url = https://github.com/RichardLirh/Richard-fonts.git

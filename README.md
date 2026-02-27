@@ -11,6 +11,10 @@ This directory is a **superproject** that tracks each child project as a Git sub
 - `Richard-esp32`
 - `Richard-mqtt-gateway`
 
+## Environment setup
+
+- See `docs/environment-setup.md` for local setup (MySQL, Redis, Node.js, Python, JDK/Maven, and one-command startup).
+
 ## Daily workflow
 
 1. Enter a child project and commit there first:
