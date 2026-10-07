@@ -8,9 +8,53 @@ $dockerCommand = Get-Command docker.exe -ErrorAction SilentlyContinue
 $dockerCli = if ($dockerCommand) { $dockerCommand.Source } else { Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe' }
 if (-not (Test-Path -LiteralPath $dockerCli)) { throw 'Install Docker Desktop first.' }
 $composeArgs = @('compose','--project-directory',$repoRoot,'--env-file',$envFile,'-f',(Join-Path $repoRoot 'compose.local.yml'))
+# Buildx obtains registry tokens in the Windows client, which does not inherit
+# WinINET proxy settings. Reuse an enabled system proxy only for this command.
+$systemBuildProxy = $null
+if (-not $env:HTTPS_PROXY) {
+    $proxySettings = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction SilentlyContinue
+    if ($proxySettings.ProxyEnable -eq 1 -and $proxySettings.ProxyServer) {
+        $proxyAddress = [string]$proxySettings.ProxyServer
+        if ($proxyAddress.Contains('=')) {
+            $proxyMap = @{}
+            foreach ($entry in $proxyAddress.Split(';')) {
+                $pair = $entry.Split('=',2)
+                if ($pair.Count -eq 2) { $proxyMap[$pair[0].Trim()] = $pair[1].Trim() }
+            }
+            $proxyAddress = if ($proxyMap['https']) { $proxyMap['https'] } else { $proxyMap['http'] }
+        }
+        if ($proxyAddress) {
+            $systemBuildProxy = if ($proxyAddress -match '^https?://') { $proxyAddress } else { "http://$proxyAddress" }
+        }
+    }
+}
 function Invoke-LocalCompose {
-    & $dockerCli @composeArgs @args
-    if ($LASTEXITCODE -ne 0) { throw "Docker Compose failed (exit $LASTEXITCODE). No processes or volumes were removed." }
+    $savedHttp = $env:HTTP_PROXY
+    $savedHttps = $env:HTTPS_PROXY
+    $savedNoProxy = $env:NO_PROXY
+    $savedBuildProxy = $env:LOCAL_BUILD_PROXY
+    try {
+        if ($systemBuildProxy) {
+            if (-not $env:HTTP_PROXY) { $env:HTTP_PROXY = $systemBuildProxy }
+            $env:HTTPS_PROXY = $systemBuildProxy
+            $env:NO_PROXY = (@($savedNoProxy,'127.0.0.1','localhost','host.docker.internal') | Where-Object { $_ }) -join ','
+        }
+        if (-not $env:LOCAL_BUILD_PROXY -and $env:HTTPS_PROXY) {
+            $buildProxyUri = [UriBuilder]::new($env:HTTPS_PROXY)
+            if ($buildProxyUri.Host -in @('127.0.0.1','localhost','::1')) {
+                $buildProxyUri.Host = 'host.docker.internal'
+            }
+            $env:LOCAL_BUILD_PROXY = $buildProxyUri.Uri.AbsoluteUri.TrimEnd('/')
+        }
+        & $dockerCli @composeArgs @args
+        $composeExitCode = $LASTEXITCODE
+    } finally {
+        $env:HTTP_PROXY = $savedHttp
+        $env:HTTPS_PROXY = $savedHttps
+        $env:NO_PROXY = $savedNoProxy
+        $env:LOCAL_BUILD_PROXY = $savedBuildProxy
+    }
+    if ($composeExitCode -ne 0) { throw "Docker Compose failed (exit $composeExitCode). No processes or volumes were removed." }
 }
 function Read-LocalEnv {
     $values = @{}

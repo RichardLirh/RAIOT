@@ -6,6 +6,11 @@ x-logging: &local-logging
     max-size: '10m'
     max-file: '3'
 
+x-build-proxy: &local-build-proxy
+  HTTP_PROXY: ${LOCAL_BUILD_PROXY:-}
+  HTTPS_PROXY: ${LOCAL_BUILD_PROXY:-}
+  NO_PROXY: localhost,127.0.0.1,mysql,redis,backend,task-api,ai-server,mqtt
+
 services:
   mysql:
     image: mysql:8.4
@@ -42,7 +47,9 @@ services:
     logging: *local-logging
 
   backend:
-    build: ./Richard-backend
+    build:
+      context: ./Richard-backend
+      args: *local-build-proxy
     image: raiot/backend:local
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -68,7 +75,9 @@ services:
     logging: *local-logging
 
   task-api:
-    build: ./Richard-im
+    build:
+      context: ./Richard-im
+      args: *local-build-proxy
     image: raiot/task-api:local
     environment:
       XIAOZHI_BIND: 0.0.0.0
@@ -88,7 +97,9 @@ services:
     logging: *local-logging
 
   admin:
-    build: ./Richard-admin
+    build:
+      context: ./Richard-admin
+      args: *local-build-proxy
     image: raiot/admin:local
     environment:
       TASK_API_UPSTREAM: task-api:8010
@@ -108,7 +119,9 @@ services:
 
   ai-server:
     profiles: [voice]
-    build: ./Richard-ai-server
+    build:
+      context: ./Richard-ai-server
+      args: *local-build-proxy
     image: raiot/ai-server:local
     environment:
       RAIOT_AI_BIND_IP: 0.0.0.0
@@ -140,7 +153,9 @@ services:
 
   mqtt:
     profiles: [voice]
-    build: ./Richard-mqtt-gateway
+    build:
+      context: ./Richard-mqtt-gateway
+      args: *local-build-proxy
     image: raiot/mqtt:local
     environment:
       CHAT_SERVER_URL: ws://ai-server:9000/richard/v1/?from=mqtt_gateway
@@ -159,7 +174,7 @@ services:
     depends_on:
       ai-server: {condition: service_healthy}
     healthcheck:
-      test: ['CMD', 'node', '-e', 'const s=require("net").connect(1883,"127.0.0.1");s.on("connect",()=>{s.end();process.exit(0)});s.on("error",()=>process.exit(1));s.setTimeout(3000,()=>process.exit(1))']
+      test: ['CMD', 'node', '-e', 'Promise.all([1883,8007].map(p=>new Promise((resolve,reject)=>{const s=require("net").connect(p,"127.0.0.1");s.on("connect",()=>{s.end();resolve()});s.on("error",reject);s.setTimeout(3000,()=>{s.destroy();reject(new Error("timeout"))})}))).then(()=>process.exit(0),()=>process.exit(1))']
       interval: 10s
       timeout: 5s
       retries: 15

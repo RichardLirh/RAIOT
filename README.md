@@ -33,7 +33,7 @@ The independent local API can run before Docker is available:
 .\scripts\Start-TaskApi.ps1
 ```
 
-Docker Desktop and WSL are installed. Windows requires a restart before its new Virtual Machine Platform can start containers. After restarting and opening Docker Desktop:
+Docker Desktop and WSL are installed. The first Windows restart was completed on 2026-10-08, and all seven local containers passed health checks. Open Docker Desktop and wait for its engine, then run:
 
 ```powershell
 .\Start-Local.ps1 -ValidateOnly
