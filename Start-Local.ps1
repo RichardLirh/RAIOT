@@ -2,6 +2,7 @@
 param(
     [switch]$WithVoice,
     [switch]$WithLan,
+    [switch]$WithVoiceMail,
     [string]$LanIPAddress,
     [switch]$ValidateOnly
 )
@@ -10,6 +11,7 @@ $repoRoot = $PSScriptRoot
 . (Join-Path $repoRoot 'scripts\Local-Lan.ps1')
 if ($LanIPAddress -and -not $WithLan) { throw '-LanIPAddress requires -WithLan.' }
 if ($WithLan -and -not $WithVoice) { throw 'Use -WithVoice -WithLan together for hardware LAN access.' }
+if ($WithVoiceMail -and -not $WithVoice) { throw '-WithVoiceMail requires -WithVoice.' }
 $lan = if ($WithLan) { Resolve-LocalLanAddress -IPAddress $LanIPAddress } else { $null }
 $savedLanIp = [Environment]::GetEnvironmentVariable('LOCAL_LAN_IP', 'Process')
 try {
@@ -21,6 +23,14 @@ $dockerCli = if ($dockerCommand) { $dockerCommand.Source } else { Join-Path $env
 if (-not (Test-Path -LiteralPath $dockerCli)) { throw 'Install Docker Desktop first.' }
 $composeArgs = @('compose','--project-directory',$repoRoot,'--env-file',$envFile,'-f',(Join-Path $repoRoot 'compose.local.yml'))
 if ($WithLan) { $composeArgs += @('-f', (Join-Path $repoRoot 'compose.lan.yml')) }
+if ($WithVoiceMail) {
+    foreach ($name in @('voice-token.txt','voice-devices.json')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $repoRoot ".local\$name") -PathType Leaf)) {
+            throw 'Run scripts/Initialize-VoiceMail.ps1 -DeviceId <bound-device-mac> before enabling voice mail.'
+        }
+    }
+    $composeArgs += @('-f', (Join-Path $repoRoot 'compose.voice-mail.yml'))
+}
 # Buildx obtains registry tokens in the Windows client, which does not inherit
 # WinINET proxy settings. Reuse an enabled system proxy only for this command.
 $systemBuildProxy = $null

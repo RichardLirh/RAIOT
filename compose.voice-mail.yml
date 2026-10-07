@@ -1,0 +1,22 @@
+# Explicit opt-in overlay; credentials stay in .local and are never sent to the model.
+services:
+  task-api:
+    environment:
+      XIAOZHI_MAIL_DRAFTS_ENABLED: '1'
+      VOICE_API_TOKEN_FILE: /run/secrets/voice-token.txt
+      VOICE_DEVICE_ALLOWLIST_FILE: /run/secrets/voice-devices.json
+    volumes:
+      - ./.local/voice-token.txt:/run/secrets/voice-token.txt:ro
+      - ./.local/voice-devices.json:/run/secrets/voice-devices.json:ro
+  ai-server:
+    environment:
+      RAIOT_VOICE_MAIL_ENABLED: '1'
+      RAIOT_VOICE_MAIL_API_URL: http://task-api:8010
+      RAIOT_VOICE_MAIL_TOKEN_FILE: /run/secrets/voice-token.txt
+      RAIOT_VOICE_MAIL_DEVICE_ALLOWLIST_FILE: /run/secrets/voice-devices.json
+      RAIOT_VOICE_MAIL_TAIL_GUARD_SECONDS: '2'
+    volumes:
+      - ./.local/voice-token.txt:/run/secrets/voice-token.txt:ro
+      - ./.local/voice-devices.json:/run/secrets/voice-devices.json:ro
+    depends_on:
+      task-api: {condition: service_healthy}
