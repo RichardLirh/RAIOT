@@ -103,11 +103,16 @@ docker compose --env-file .env.local -f compose.local.yml --profile voice stop
 
 - Docker Desktop 4.94.0、Docker CLI 29.8.2、Compose v5.5.1、WSL 3.0.1.0 已安装。
 - Java 后端已用本机 JDK 21 / Maven 构建成功。
-- SenseVoiceSmall 权重已下载，大小和 SHA256 已核对官方元数据；已加载执行中文样例识别及合成音频回读，未采集真实硬件麦克风。
+- SenseVoiceSmall 权重已下载，大小和 SHA256 已核对官方元数据；已加载执行中文样例识别及合成音频回读，随后完成下述 ESP32 实物语音验证。
 - Compose 配置、PowerShell 语法及代理环境恢复检查通过；7 个服务容器健康。
 - MySQL migrations、后端公共配置及 SM2 初始化通过，未登录模型接口拒绝访问；Admin 注册/登录、反向代理、任务监控和窄屏布局共 14 项验收通过。
 - MQTT 健康检查同时检查 1883 和管理 API 8007，机器生成的 256 位十六进制签名密钥可用，日志不打印认证令牌。
 - 后端镜像排除了原仓库 `application-dev.yml`，已核对最终 JAR 包含 local 配置且不包含 dev 配置。
 - 语音功能验收通过：无网络临时容器加载 SenseVoiceSmall 并识别官方中文样例，Silero、FFmpeg、Opus 往返通过；EdgeTTS 合成固定测试句后，本地 ASR 回读结果归一化一致。EdgeTTS 在主 AI 容器默认不带代理的配置下也单独验证成功，无需给模型配置增加代理。
-- 语音报告在 `.local/voice-verification/`，分别为 `asr.json`、`roundtrip.json`、`tts-direct.json`；没有采集用户麦克风音频。
-- ESP32-S3 原固件已完整备份，确认底板 `ESP32-S3-AI-Adapter V1.01`；实际麦克风/喇叭尚未验收，未刷写硬件。App 已实际启动云执行器和浏览器，用户将最终场景改为 163 邮箱，自发信及 72 小时扫描尚待登录后的真实验证，不能用组件测试代替。
+- 组件语音报告在 `.local/voice-verification/`，分别为 `asr.json`、`roundtrip.json`、`tts-direct.json`；这些报告记录样例与合成音频验证，实物语音验收另见下文。
+- ESP32-S3 已确认底板 `ESP32-S3-AI-Adapter V1.01`，候选固件 `2.2.3`（ESP-IDF `v5.5.2`）已实际刷写，写入退出码为 0，目标设备及全部写入 hash 校验通过。OLED 驱动已初始化，用户已确认屏幕可见文字；这尚不能代替麦克风与扬声器验收。
+- 输出音量仍为候选固件的 15，并已保存到 NVS；I2S 初始化及测试音数据写入通过。用户先前反馈无声，随后已确认听到声音及针对真实说话的正常回答；本轮没有因此调高音量。音量诊断修改 `4345461` 已构建、尚未刷写，不应记作已生效。
+- 用户已确认 Wi-Fi 连接成功，硬件地址 `192.168.0.107` 与精确 MAC 邻居记录匹配，真实 OTA 返回激活码后已通过正常 Admin 流程绑定；不在文档保存临时激活码。服务端已记录设备 MQTT → AI 连接、MCP 工具、真实 ASR“小智小智”、Qwen 回复和 EdgeTTS 音频发送，用户确认实际听到正常回答，实物语音完整链路验收通过。Admin 仍显示“离线”，该状态标签正在单独排查，不等于语音链路未通。
+- 此前配网时手机连入设备 AP 的地址为 `192.168.4.2`；强制使用 `wlan0` 请求配网页面返回 HTTP 200，默认蜂窝路由请求超时，因此曾指导用户手动关闭移动数据。本机工具修改手机移动数据的尝试被策略拦截，未执行。
+- 原固件 `more-agent-ai-key-0.1.1` 的完整 16MB 备份仍保留在 `.local/esp32-backup/original-more-agent-ai-key-0.1.1-20261008.bin`，SHA256 为 `085BA1ADC21367ACDE979D83E59FDD0A8E891DF071ECB8B394EB72CF9D3DC0F2`，应用 checksum/hash 有效；可使用 `.local/Restore-OriginalEsp32.ps1` 恢复。刷写、屏幕及音量证据见 `.local/esp32-hardware-verification.json`。
+- App 已实际启动云执行器和浏览器，当前 163 邮箱会话已完成真实登录；向本人自发测试邮件及任务创建前 72 小时扫描尚未完成，不能用登录成功或组件测试代替最终验收。
