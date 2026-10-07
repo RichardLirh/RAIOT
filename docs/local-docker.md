@@ -110,9 +110,11 @@ docker compose --env-file .env.local -f compose.local.yml --profile voice stop
 - 后端镜像排除了原仓库 `application-dev.yml`，已核对最终 JAR 包含 local 配置且不包含 dev 配置。
 - 语音功能验收通过：无网络临时容器加载 SenseVoiceSmall 并识别官方中文样例，Silero、FFmpeg、Opus 往返通过；EdgeTTS 合成固定测试句后，本地 ASR 回读结果归一化一致。EdgeTTS 在主 AI 容器默认不带代理的配置下也单独验证成功，无需给模型配置增加代理。
 - 组件语音报告在 `.local/voice-verification/`，分别为 `asr.json`、`roundtrip.json`、`tts-direct.json`；这些报告记录样例与合成音频验证，实物语音验收另见下文。
-- ESP32-S3 已确认底板 `ESP32-S3-AI-Adapter V1.01`，候选固件 `2.2.3`（ESP-IDF `v5.5.2`）已实际刷写，写入退出码为 0，目标设备及全部写入 hash 校验通过。OLED 驱动已初始化，用户已确认屏幕可见文字；这尚不能代替麦克风与扬声器验收。
-- 输出音量仍为候选固件的 15，并已保存到 NVS；I2S 初始化及测试音数据写入通过。用户先前反馈无声，随后已确认听到声音及针对真实说话的正常回答；本轮没有因此调高音量。音量诊断修改 `4345461` 已构建、尚未刷写，不应记作已生效。
-- 用户已确认 Wi-Fi 连接成功，硬件地址 `192.168.0.107` 与精确 MAC 邻居记录匹配，真实 OTA 返回激活码后已通过正常 Admin 流程绑定；不在文档保存临时激活码。服务端已记录设备 MQTT → AI 连接、MCP 工具、真实 ASR“小智小智”、Qwen 回复和 EdgeTTS 音频发送，用户确认实际听到正常回答，实物语音完整链路验收通过。Admin 仍显示“离线”，该状态标签正在单独排查，不等于语音链路未通。
+- ESP32-S3 已确认底板 `ESP32-S3-AI-Adapter V1.01`；初次候选固件 `2.2.3`（ESP-IDF `v5.5.2`）刷写及 hash 校验通过，OLED 已显示文字。最新应用固件 `b339d87` 随后只写入 OTA 应用分区（app-only），回读校验通过，保留 NVS、原 Wi-Fi 配置、设备 UUID 与已有绑定。
+- 输出音量 15 保存在 NVS，不能把刷写应用分区说成已调高音量。用户已确认听到针对真实说话的正常回答，麦克风 → ASR → Qwen → EdgeTTS → 扬声器的实物语音链路验收通过。
+- 用户已确认 Wi-Fi 连接成功，硬件地址 `192.168.0.107` 与精确 MAC 邻居记录匹配，真实 OTA 返回激活码后已通过正常 Admin 流程绑定；不在文档保存临时激活码。服务端已记录设备 MQTT → AI 连接、MCP 工具、真实 ASR“小智小智”、Qwen 回复和 EdgeTTS 音频发送，用户确认实际听到正常回答，实物语音完整链路验收通过。
+- 待机误显示“离线”的修复已部署：MQTT `3ed639a`、Admin `e806fbf` 区分设备 MQTT 在线与临时 AI 语音会话，保留 `isAlive` 原语义。真实设备待机响应为 `mqttConnected=true`、`exists=true`、`isAlive=false`、`voiceSessionActive=false`。本次仅更新 admin/mqtt/ai-server 三容器，均健康；MySQL、Redis、backend、task-api 容器未更换。Admin HTTP 200，实际下发的脚本已含新状态逻辑；未另做登录后视觉验收。MQTT 状态测试 1/1 通过，报告 `.local/status-fix-verification.json`。
 - 此前配网时手机连入设备 AP 的地址为 `192.168.4.2`；强制使用 `wlan0` 请求配网页面返回 HTTP 200，默认蜂窝路由请求超时，因此曾指导用户手动关闭移动数据。本机工具修改手机移动数据的尝试被策略拦截，未执行。
 - 原固件 `more-agent-ai-key-0.1.1` 的完整 16MB 备份仍保留在 `.local/esp32-backup/original-more-agent-ai-key-0.1.1-20261008.bin`，SHA256 为 `085BA1ADC21367ACDE979D83E59FDD0A8E891DF071ECB8B394EB72CF9D3DC0F2`，应用 checksum/hash 有效；可使用 `.local/Restore-OriginalEsp32.ps1` 恢复。刷写、屏幕及音量证据见 `.local/esp32-hardware-verification.json`。
-- App 已实际启动云执行器和浏览器，当前 163 邮箱会话已完成真实登录；向本人自发测试邮件及任务创建前 72 小时扫描尚未完成，不能用登录成功或组件测试代替最终验收。
+- 邮箱最终范围已改为仅向本人发送测试邮件，全部扫描已取消。原任务 `f1f0c24e-0d7e-420b-ab83-f8cce0dd9999` 已完成真实 163 登录，北京时间 2026-10-08 04:03:52 只点击过一次发送；04:04:55 网易成功页显示“邮件发送成功”“已成功发送到收件人(1)”，主题为“小智 × Hermes 云端浏览器联调测试”。已取得原站发送成功证据，尚未复核收件箱送达，未再次发信。
+- 原完整邮箱任务因 20 分钟 UI adapter 验证等待超时，仍为 `failed`，结果仅按部分证据记录，`send_state: uncertain` 保持原样，不能改称原任务全部完成或已核实送达。报告已标记 `scan_cancelled_by_user: true`，扫描读取数为 0，云端沙箱及关联测试资源已全部清理。12 小时扫描恢复源码 `9e7b409` / `72d3dc6` 仅保留在 im/runtime 的本地提交，未部署、未据此创建恢复任务；App 未提交的恢复按钮/API 改动已撤销，手机已回装保留部分报告显示的 `b1474a8`。
