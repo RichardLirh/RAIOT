@@ -1,0 +1,174 @@
+name: raiot-local
+
+x-logging: &local-logging
+  driver: json-file
+  options:
+    max-size: '10m'
+    max-file: '3'
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: richard_esp32_server
+      MYSQL_USER: raiot
+      MYSQL_PASSWORD: ${LOCAL_DB_PASSWORD:?Run scripts/Initialize-Local.ps1}
+      MYSQL_ROOT_PASSWORD: ${LOCAL_DB_ROOT_PASSWORD:?Run scripts/Initialize-Local.ps1}
+      TZ: Asia/Shanghai
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ['CMD-SHELL', 'MYSQL_PWD="$$MYSQL_PASSWORD" mysql -h 127.0.0.1 -u "$$MYSQL_USER" -D "$$MYSQL_DATABASE" -e "SELECT 1" >/dev/null 2>&1']
+      interval: 5s
+      timeout: 5s
+      retries: 40
+      start_period: 30s
+    restart: unless-stopped
+    logging: *local-logging
+
+  redis:
+    image: redis:7.4-alpine
+    environment:
+      LOCAL_REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD:?Run scripts/Initialize-Local.ps1}
+    command: ['sh', '-c', 'exec redis-server --appendonly yes --requirepass "$$LOCAL_REDIS_PASSWORD"']
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'REDISCLI_AUTH="$$LOCAL_REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *local-logging
+
+  backend:
+    build: ./Richard-backend
+    image: raiot/backend:local
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      LOCAL_JDBC_URL: jdbc:mysql://mysql:3306/richard_esp32_server?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&nullCatalogMeansCurrent=true&allowPublicKeyRetrieval=true&useSSL=false
+      LOCAL_DB_USER: raiot
+      LOCAL_DB_PASSWORD: ${LOCAL_DB_PASSWORD}
+      LOCAL_REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD}
+      TZ: Asia/Shanghai
+    ports:
+      - '${LOCAL_BIND_IP:-127.0.0.1}:8002:8002'
+    volumes:
+      - backend-uploads:/app/uploadfile
+    depends_on:
+      mysql: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'curl', '--fail', '--silent', 'http://127.0.0.1:8002/richard/doc.html']
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 60s
+    restart: unless-stopped
+    logging: *local-logging
+
+  task-api:
+    build: ./Richard-im
+    image: raiot/task-api:local
+    environment:
+      XIAOZHI_BIND: 0.0.0.0
+      XIAOZHI_DATA_DIR: /data
+      API_TOKENS_FILE: /run/secrets/task-tokens.json
+    ports:
+      - '127.0.0.1:8010:8010'
+    volumes:
+      - task-data:/data
+      - ./.local/task-tokens.json:/run/secrets/task-tokens.json:ro
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8010/health", timeout=3)']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    logging: *local-logging
+
+  admin:
+    build: ./Richard-admin
+    image: raiot/admin:local
+    environment:
+      TASK_API_UPSTREAM: task-api:8010
+      JAVA_API_UPSTREAM: backend:8002
+    ports:
+      - '${LOCAL_BIND_IP:-127.0.0.1}:8001:80'
+    depends_on:
+      backend: {condition: service_healthy}
+      task-api: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'wget', '-q', '-O', '/dev/null', 'http://127.0.0.1/health']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *local-logging
+
+  ai-server:
+    profiles: [voice]
+    build: ./Richard-ai-server
+    image: raiot/ai-server:local
+    environment:
+      RAIOT_AI_BIND_IP: 0.0.0.0
+      RAIOT_AI_WS_PORT: '9000'
+      RAIOT_AI_HTTP_PORT: '9003'
+      RAIOT_HOST_IP: ${LOCAL_ADVERTISE_IP:-127.0.0.1}
+      RAIOT_MQTT_SIGNATURE_KEY: ${LOCAL_MQTT_SIGNATURE_KEY}
+      RAIOT_MQTT_GATEWAY: ${LOCAL_ADVERTISE_IP:-127.0.0.1}:1883
+      RAIOT_UDP_GATEWAY: ${LOCAL_ADVERTISE_IP:-127.0.0.1}:8884
+      TZ: Asia/Shanghai
+    volumes:
+      - ./.local/ai-config.yaml:/app/data/.config.yaml:ro
+      - ./Richard-ai-server/models:/app/models:ro
+      - ai-audio:/app/tmp
+    ports:
+      - '${LOCAL_BIND_IP:-127.0.0.1}:9000:9000'
+      - '${LOCAL_BIND_IP:-127.0.0.1}:9003:9003'
+    depends_on:
+      backend: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'python', '-c', 'import socket; socket.create_connection(("127.0.0.1",9000),3).close(); socket.create_connection(("127.0.0.1",9003),3).close()']
+      interval: 10s
+      timeout: 8s
+      retries: 30
+      start_period: 90s
+    stdin_open: true
+    restart: unless-stopped
+    logging: *local-logging
+
+  mqtt:
+    profiles: [voice]
+    build: ./Richard-mqtt-gateway
+    image: raiot/mqtt:local
+    environment:
+      CHAT_SERVER_URL: ws://ai-server:9000/richard/v1/?from=mqtt_gateway
+      MQTT_PORT: '1883'
+      UDP_PORT: '8884'
+      API_PORT: '8007'
+      SERVER_IP: ${LOCAL_ADVERTISE_IP:-127.0.0.1}
+      PUBLIC_IP: ${LOCAL_ADVERTISE_IP:-127.0.0.1}
+      MQTT_SIGNATURE_KEY: ${LOCAL_MQTT_SIGNATURE_KEY}
+      SERVER_SECRET: ${LOCAL_SERVER_SECRET:-}
+      TZ: Asia/Shanghai
+    ports:
+      - '${LOCAL_BIND_IP:-127.0.0.1}:1883:1883'
+      - '${LOCAL_BIND_IP:-127.0.0.1}:8884:8884/udp'
+      - '127.0.0.1:8007:8007'
+    depends_on:
+      ai-server: {condition: service_healthy}
+    healthcheck:
+      test: ['CMD', 'node', '-e', 'const s=require("net").connect(1883,"127.0.0.1");s.on("connect",()=>{s.end();process.exit(0)});s.on("error",()=>process.exit(1));s.setTimeout(3000,()=>process.exit(1))']
+      interval: 10s
+      timeout: 5s
+      retries: 15
+    restart: unless-stopped
+    logging: *local-logging
+
+volumes:
+  mysql-data:
+  redis-data:
+  backend-uploads:
+  task-data:
+  ai-audio:

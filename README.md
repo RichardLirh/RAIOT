@@ -14,6 +14,35 @@ This directory is a **superproject** that tracks each child project as a Git sub
 ## Environment setup
 
 - See `docs/environment-setup.md` for local setup (MySQL, Redis, Node.js, Python, JDK/Maven, and one-command startup).
+- For the current Windows Docker Desktop demo, use [`docs/local-docker.md`](docs/local-docker.md) and `Start-Local.ps1`. The older `start-all.ps1` targets the original native installation and changes device configuration; it is not the new container launcher.
+
+## Local App and Hermes demo (2026-10-07)
+
+The checkout is at `D:\workspace\personal\RAIOT`. The seven upstream submodules are present. The following local repositories extend the demo:
+
+- `Richard-demo-app`: Flutter Android task creation, history, approval, cancellation and the human-control session entry.
+- `Richard-im`: durable SQLite Run/event API and a separate Windows Hermes worker.
+- `Richard-agent-runtime`: checkout of `RichardLirh/hermes-demo`, with cancellation and versioned approval integration.
+- `Richard-admin`: retains the existing account/device UI and adds a read-only task monitor at `/local-runs.html`.
+
+New local repositories have not yet been published or registered as remote submodules. Their source is kept in this checkout; cloning RAIOT elsewhere will not include them until that publication step is completed.
+
+The independent local API can run before Docker is available:
+
+```powershell
+.\scripts\Start-TaskApi.ps1
+```
+
+Docker Desktop and WSL are installed. Windows requires a restart before its new Virtual Machine Platform can start containers. After restarting and opening Docker Desktop:
+
+```powershell
+.\Start-Local.ps1 -ValidateOnly
+.\Start-Local.ps1
+```
+
+The default stack contains MySQL, Redis, Java backend, task API and Admin. The `voice` profile adds AI and MQTT services after model assets and provider settings are prepared. The Windows cloud worker is deliberately separate; it uses the existing protected model/cloud credentials and creates ACS resources only for submitted tasks.
+
+Access tokens and local database passwords are generated into ignored `.local/` and `.env.local`. Never add those files or an APK containing a local owner token to the public repository.
 
 ## Daily workflow
 
@@ -41,8 +70,7 @@ git submodule update --init --recursive
 
 ## Important note
 
-Current submodule URLs are local paths (for local setup).
-If you publish these projects to remote Git hosts, update URLs:
+Existing submodule URLs point to `RichardLirh` repositories on GitHub. If a child repository moves, update its URL:
 
 ```powershell
 git submodule set-url Richard-backend <your-remote-url>
