@@ -1,13 +1,26 @@
 [CmdletBinding()]
-param([switch]$WithVoice, [switch]$ValidateOnly)
+param(
+    [switch]$WithVoice,
+    [switch]$WithLan,
+    [string]$LanIPAddress,
+    [switch]$ValidateOnly
+)
 $ErrorActionPreference = 'Stop'
 $repoRoot = $PSScriptRoot
+. (Join-Path $repoRoot 'scripts\Local-Lan.ps1')
+if ($LanIPAddress -and -not $WithLan) { throw '-LanIPAddress requires -WithLan.' }
+if ($WithLan -and -not $WithVoice) { throw 'Use -WithVoice -WithLan together for hardware LAN access.' }
+$lan = if ($WithLan) { Resolve-LocalLanAddress -IPAddress $LanIPAddress } else { $null }
+$savedLanIp = [Environment]::GetEnvironmentVariable('LOCAL_LAN_IP', 'Process')
+try {
+if ($WithLan) { $env:LOCAL_LAN_IP = $lan.IPAddress }
 & (Join-Path $repoRoot 'scripts\Initialize-Local.ps1')
 $envFile = Join-Path $repoRoot '.env.local'
 $dockerCommand = Get-Command docker.exe -ErrorAction SilentlyContinue
 $dockerCli = if ($dockerCommand) { $dockerCommand.Source } else { Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe' }
 if (-not (Test-Path -LiteralPath $dockerCli)) { throw 'Install Docker Desktop first.' }
 $composeArgs = @('compose','--project-directory',$repoRoot,'--env-file',$envFile,'-f',(Join-Path $repoRoot 'compose.local.yml'))
+if ($WithLan) { $composeArgs += @('-f', (Join-Path $repoRoot 'compose.lan.yml')) }
 # Buildx obtains registry tokens in the Windows client, which does not inherit
 # WinINET proxy settings. Reuse an enabled system proxy only for this command.
 $systemBuildProxy = $null
@@ -87,6 +100,8 @@ if ($WithVoice) {
 Invoke-LocalCompose up -d --build --wait --wait-timeout 360 mysql redis backend
 $settings = Read-LocalEnv
 $advertise = $settings['LOCAL_ADVERTISE_IP']
+if ($WithLan) { $advertise = $lan.IPAddress }
+$frontend = if ($WithLan) { '127.0.0.1' } else { $advertise }
 $parsedAddress = $null
 if (-not [Net.IPAddress]::TryParse($advertise,[ref]$parsedAddress) -or $parsedAddress.AddressFamily -ne [Net.Sockets.AddressFamily]::InterNetwork) {
     throw 'LOCAL_ADVERTISE_IP must be an IPv4 address reachable by your device.'
@@ -102,7 +117,7 @@ Write-LocalSetting 'LOCAL_SERVER_SECRET' $serverSecret
 $updates = @"
 UPDATE sys_params SET param_value='ws://${advertise}:9000/richard/v1/' WHERE param_code='server.websocket';
 UPDATE sys_params SET param_value='http://${advertise}:8002/richard/ota/' WHERE param_code='server.ota';
-UPDATE sys_params SET param_value='http://${advertise}:8001/' WHERE param_code='server.fronted_url';
+UPDATE sys_params SET param_value='http://${frontend}:8001/' WHERE param_code='server.fronted_url';
 UPDATE sys_params SET param_value='${advertise}:1883' WHERE param_code='server.mqtt_gateway';
 UPDATE sys_params SET param_value='${advertise}:8884' WHERE param_code='server.udp_gateway';
 UPDATE sys_params SET param_value='mqtt:8007' WHERE param_code='server.mqtt_manager_api';
@@ -133,4 +148,12 @@ Invoke-LocalCompose up -d --build --wait --wait-timeout 180 task-api admin
 if ($WithVoice) { Invoke-LocalCompose --profile voice up -d --build --wait --wait-timeout 600 ai-server mqtt }
 Invoke-LocalCompose ps
 Write-Host 'Admin: http://127.0.0.1:8001/  Java API: http://127.0.0.1:8002/richard/  Task API: http://127.0.0.1:8010/'
+if ($WithLan) {
+    Write-Host "Hardware LAN ($($lan.InterfaceAlias)): http://$($lan.IPAddress):8002/richard/ota/"
+    Write-Host "LAN ports: TCP 8002,9000,9003,1883; UDP 8884. Admin and task management remain localhost-only."
+    Write-Host 'Configure the limited Windows firewall rules separately with scripts/Set-LocalHardwareFirewall.ps1.'
+}
 Write-Host 'The cloud browser worker runs on Windows separately: scripts/Start-AgentWorker.ps1.'
+} finally {
+    [Environment]::SetEnvironmentVariable('LOCAL_LAN_IP', $savedLanIp, 'Process')
+}

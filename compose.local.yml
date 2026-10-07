@@ -59,7 +59,7 @@ services:
       LOCAL_REDIS_PASSWORD: ${LOCAL_REDIS_PASSWORD}
       TZ: Asia/Shanghai
     ports:
-      - '${LOCAL_BIND_IP:-127.0.0.1}:8002:8002'
+      - '127.0.0.1:8002:8002'
     volumes:
       - backend-uploads:/app/uploadfile
     depends_on:
@@ -105,7 +105,7 @@ services:
       TASK_API_UPSTREAM: task-api:8010
       JAVA_API_UPSTREAM: backend:8002
     ports:
-      - '${LOCAL_BIND_IP:-127.0.0.1}:8001:80'
+      - '127.0.0.1:8001:80'
     depends_on:
       backend: {condition: service_healthy}
       task-api: {condition: service_healthy}
@@ -137,8 +137,8 @@ services:
       - ./Richard-ai-server/models:/app/models:ro
       - ai-audio:/app/tmp
     ports:
-      - '${LOCAL_BIND_IP:-127.0.0.1}:9000:9000'
-      - '${LOCAL_BIND_IP:-127.0.0.1}:9003:9003'
+      - '127.0.0.1:9000:9000'
+      - '127.0.0.1:9003:9003'
     depends_on:
       backend: {condition: service_healthy}
     healthcheck:
@@ -168,8 +168,8 @@ services:
       SERVER_SECRET: ${LOCAL_SERVER_SECRET:-}
       TZ: Asia/Shanghai
     ports:
-      - '${LOCAL_BIND_IP:-127.0.0.1}:1883:1883'
-      - '${LOCAL_BIND_IP:-127.0.0.1}:8884:8884/udp'
+      - '127.0.0.1:1883:1883'
+      - '127.0.0.1:8884:8884/udp'
       - '127.0.0.1:8007:8007'
     depends_on:
       ai-server: {condition: service_healthy}

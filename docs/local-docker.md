@@ -41,13 +41,53 @@ Docker Desktop 和 WSL 已于 2026-10-07 安装；2026-10-08 重启后，Docker 
 
 脚本读取 Java 后端为本地数据库生成的 `server.secret`，生成 `.local/ai-config.yaml`，将 MQTT 签名及设备访问地址写入本地 `sys_params`，仅清理对应配置缓存。AI 读取 Java 配置，MQTT 使用相同密钥连接 AI。
 
-模型目录以 `./Richard-ai-server/models:/app/models:ro` 挂载，AI 配置以 `./.local/ai-config.yaml:/app/data/.config.yaml:ro` 挂载；Dockerfile 将 `models`、`data` 和环境文件排除在镜像构建上下文外。模型资源校验记录在 `.local/sensevoice-resource-verification.json`。权重准备完成不代表语音推理通过；LLM/ASR/TTS 的实际模型选择及调用凭据需要后端启动后配置。
+模型目录以 `./Richard-ai-server/models:/app/models:ro` 挂载，AI 配置以 `./.local/ai-config.yaml:/app/data/.config.yaml:ro` 挂载；Dockerfile 将 `models`、`data` 和环境文件排除在镜像构建上下文外。模型资源校验记录在 `.local/sensevoice-resource-verification.json`。本机现已完成 SenseVoiceSmall 实际加载、中文样例识别及 EdgeTTS → ASR 回读验证，详情见下方验收边界；其他机器仍需配置实际模型选择及调用凭据。
 
 AI WebSocket 为 `9000`，HTTP 为 `9003`，MQTT TCP 为 `1883`，音频 UDP 为 `8884`，MQTT 管理 API 为 `8007`。`8884` 是 UDP 音频端口，并非 TLS MQTT 端口。
 
 ## 小智硬件局域网连接
 
-默认所有可发布端口绑定本机回环。若硬件需经 Wi-Fi 连接，在 `.env.local` 将 `LOCAL_BIND_IP` 和 `LOCAL_ADVERTISE_IP` 都改为 Windows 实际局域网 IPv4，再运行启动脚本。Admin、Java、AI、MQTT 仅绑定该网卡地址；任务 API 与 MQTT 管理 API 仍只发布到回环。按实际需要在 Windows 防火墙放行设备所在私有网段，不要建立公网端口映射。
+默认所有可发布端口固定绑定 `127.0.0.1`。`LOCAL_BIND_IP` 不再改变端口发布范围；不要通过修改 `.env.local` 把整个后台开放到局域网。硬件联调使用额外的 `compose.lan.yml`，只追加指定网卡上的硬件端口，并保留原有回环入口。
+
+先确认 ESP32 与电脑连接同一可互访的 Wi-Fi。当前电脑 WLAN 地址是 `192.168.0.105/24`，可能随 DHCP 改变；每次启用时脚本都会检查地址确实属于已连接的物理网卡，排除 Docker/WSL 虚拟网卡、回环及自动分配的链路地址。只有一个候选地址时可省略 `-LanIPAddress`，有多个时必须明确指定。
+
+```powershell
+# 普通 PowerShell：只校验地址和 Compose，不启动容器。
+.\Start-Local.ps1 -WithVoice -WithLan -LanIPAddress 192.168.0.105 -ValidateOnly
+
+# 明确准备进行硬件联调后执行；会更新设备访问地址并重建相关容器。
+.\Start-Local.ps1 -WithVoice -WithLan -LanIPAddress 192.168.0.105
+```
+
+`-WithLan` 必须与 `-WithVoice` 一起使用。LAN 地址仅用于本次 Compose 覆盖和设备广告地址，不修改 `.env.local` 的网络配置；脚本结束恢复进程里的 `LOCAL_LAN_IP`。`server.websocket`、`server.ota`、MQTT/UDP 地址使用指定 LAN IP，`server.fronted_url` 始终保留 `http://127.0.0.1:8001/`，用户在这台电脑完成设备绑定。
+
+| 入口 | 本机回环 | 指定 LAN 地址 |
+| --- | --- | --- |
+| Java OTA/API TCP 8002 | 保留 | 追加 |
+| AI WebSocket TCP 9000、HTTP TCP 9003 | 保留 | 追加 |
+| MQTT TCP 1883、音频 UDP 8884 | 保留 | 追加 |
+| Admin TCP 8001、任务 API TCP 8010、MQTT 管理 TCP 8007 | 保留 | 不开放 |
+| MySQL、Redis | 容器内部 | 不开放 |
+
+Windows 防火墙单独处理，启动脚本不会自动修改它。以下校验无需管理员权限：
+
+```powershell
+.\scripts\Set-LocalHardwareFirewall.ps1 -LanIPAddress 192.168.0.105 -ValidateOnly
+```
+
+确认范围后，在**以管理员身份运行的 PowerShell** 中执行：
+
+```powershell
+.\scripts\Set-LocalHardwareFirewall.ps1 -LanIPAddress 192.168.0.105
+# 联调结束后移除这两条 RAIOT 专用规则。
+.\scripts\Set-LocalHardwareFirewall.ps1 -LanIPAddress 192.168.0.105 -Remove
+```
+
+脚本只允许 TCP `8002,9000,9003,1883` 和 UDP `8884`，同时限定网卡、目标本地 IP 和该网卡前缀算出的来源子网（此处为 `192.168.0.0/24`）。规则适用所有网络类别，因此当前 Public 网络无需改成 Private；脚本不会关闭防火墙、修改网络类别、开放管理端口或设置路由器公网映射。重复执行只更新同名 RAIOT 规则，也支持 `-WhatIf` 预览。
+
+2026-10-08 已应用上述 LAN 配置和两条防火墙规则。硬件相关三个容器健康，指定 LAN TCP 端口可从本机连接，其他四个容器未因 LAN 调整重启；UDP 端口映射已核对。证据为 `.local/lan-deployment-verification.json` 与 `.local/lan-firewall-result.json`。这些检查还不能替代真实 Wi-Fi 设备的连接与语音验收。
+
+切回只在本机访问时执行 `.\Start-Local.ps1 -WithVoice`，然后移除上述防火墙规则；Compose 会去掉追加的 LAN 端口。只读查看包含 LAN 覆盖的配置时，应同时传两个 Compose 文件且只输出 `config --quiet` 或筛选后的端口，完整展开配置含本地凭据，不要复制分享。
 
 ## 查看与停止
 
@@ -63,11 +103,11 @@ docker compose --env-file .env.local -f compose.local.yml --profile voice stop
 
 - Docker Desktop 4.94.0、Docker CLI 29.8.2、Compose v5.5.1、WSL 3.0.1.0 已安装。
 - Java 后端已用本机 JDK 21 / Maven 构建成功。
-- SenseVoiceSmall 权重已下载，大小和 SHA256 已核对官方元数据；未加载执行模型。
+- SenseVoiceSmall 权重已下载，大小和 SHA256 已核对官方元数据；已加载执行中文样例识别及合成音频回读，未采集真实硬件麦克风。
 - Compose 配置、PowerShell 语法及代理环境恢复检查通过；7 个服务容器健康。
 - MySQL migrations、后端公共配置及 SM2 初始化通过，未登录模型接口拒绝访问；Admin 注册/登录、反向代理、任务监控和窄屏布局共 14 项验收通过。
 - MQTT 健康检查同时检查 1883 和管理 API 8007，机器生成的 256 位十六进制签名密钥可用，日志不打印认证令牌。
 - 后端镜像排除了原仓库 `application-dev.yml`，已核对最终 JAR 包含 local 配置且不包含 dev 配置。
 - 语音功能验收通过：无网络临时容器加载 SenseVoiceSmall 并识别官方中文样例，Silero、FFmpeg、Opus 往返通过；EdgeTTS 合成固定测试句后，本地 ASR 回读结果归一化一致。EdgeTTS 在主 AI 容器默认不带代理的配置下也单独验证成功，无需给模型配置增加代理。
 - 语音报告在 `.local/voice-verification/`，分别为 `asr.json`、`roundtrip.json`、`tts-direct.json`；没有采集用户麦克风音频。
-- ESP32-S3 实际麦克风/喇叭和 App → Hermes 全链路未验收，云执行器未启动，未刷写硬件；不能用上述组件测试代替这些结果。
+- ESP32-S3 原固件已完整备份，确认底板 `ESP32-S3-AI-Adapter V1.01`；实际麦克风/喇叭尚未验收，未刷写硬件。App 已实际启动云执行器和浏览器，用户将最终场景改为 163 邮箱，自发信及 72 小时扫描尚待登录后的真实验证，不能用组件测试代替。

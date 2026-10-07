@@ -1,0 +1,23 @@
+# Optional overlay. The base file retains localhost ports for local clients.
+# Start-Local.ps1 validates this address against a connected physical adapter.
+services:
+  backend:
+    ports:
+      - '${LOCAL_LAN_IP:?Use Start-Local.ps1 -WithVoice -WithLan}:8002:8002'
+
+  ai-server:
+    environment:
+      RAIOT_HOST_IP: ${LOCAL_LAN_IP:?Use Start-Local.ps1 -WithVoice -WithLan}
+      RAIOT_MQTT_GATEWAY: ${LOCAL_LAN_IP}:1883
+      RAIOT_UDP_GATEWAY: ${LOCAL_LAN_IP}:8884
+    ports:
+      - '${LOCAL_LAN_IP}:9000:9000'
+      - '${LOCAL_LAN_IP}:9003:9003'
+
+  mqtt:
+    environment:
+      SERVER_IP: ${LOCAL_LAN_IP:?Use Start-Local.ps1 -WithVoice -WithLan}
+      PUBLIC_IP: ${LOCAL_LAN_IP}
+    ports:
+      - '${LOCAL_LAN_IP}:1883:1883'
+      - '${LOCAL_LAN_IP}:8884:8884/udp'
