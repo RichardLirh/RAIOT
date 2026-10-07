@@ -19,3 +19,15 @@
 [submodule "richard-fonts"]
 	path = richard-fonts
 	url = https://github.com/RichardLirh/Richard-fonts.git
+[submodule "Richard-demo-app"]
+	path = Richard-demo-app
+	url = https://github.com/RichardLirh/Richard-demo-app.git
+	branch = main
+[submodule "Richard-im"]
+	path = Richard-im
+	url = https://github.com/RichardLirh/Richard-im.git
+	branch = main
+[submodule "Richard-agent-runtime"]
+	path = Richard-agent-runtime
+	url = https://github.com/RichardLirh/hermes-demo.git
+	branch = local-app-integration
